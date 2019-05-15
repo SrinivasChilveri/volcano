@@ -71,14 +71,20 @@ var _ = Describe("Job E2E Test: Test Job PVCs", func() {
 		}
 	})
 
-	It("Generate PodGroup and valid minResource when creating job", func() {
+	FIt("Generate PodGroup and valid minResource when creating job", func() {
 		jobName := "job-name-podgroup"
 		namespace := "test"
 		context := initTestContext()
 		defer cleanupTestContext(context)
 
-		resource := v12.ResourceList{
+		resource1 := v12.ResourceList{
 			"cpu":            resource.MustParse("1000m"),
+			"memory":         resource.MustParse("500Mi"),
+			"nvidia.com/gpu": resource.MustParse("1"),
+		}
+
+		resource2 := v12.ResourceList{
+			"cpu":            resource.MustParse("2000m"),
 			"memory":         resource.MustParse("1000Mi"),
 			"nvidia.com/gpu": resource.MustParse("1"),
 		}
@@ -92,23 +98,23 @@ var _ = Describe("Job E2E Test: Test Job PVCs", func() {
 					min:   1,
 					rep:   1,
 					name:  "task-1",
-					req:   resource,
-					limit: resource,
+					req:   resource1,
+					limit: resource1,
 				},
 				{
 					img:   defaultNginxImage,
 					min:   1,
 					rep:   1,
 					name:  "task-2",
-					req:   resource,
-					limit: resource,
+					req:   resource2,
+					limit: resource2,
 				},
 			},
 		})
 
 		expected := map[string]int64{
-			"cpu":            2,
-			"memory":         1024 * 1024 * 2000,
+			"cpu":            3,
+			"memory":         1024 * 1024 * 1500,
 			"nvidia.com/gpu": 2,
 		}
 
