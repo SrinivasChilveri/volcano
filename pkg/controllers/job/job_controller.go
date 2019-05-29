@@ -18,6 +18,7 @@ package job
 
 import (
 	"github.com/golang/glog"
+	"sync"
 	"time"
 
 	"k8s.io/api/core/v1"
@@ -98,6 +99,11 @@ type Controller struct {
 	//Job Event recorder
 	recorder        record.EventRecorder
 	priorityClasses map[string]*v1beta1.PriorityClass
+
+	// To protect the jobs by processing multiple workers
+	jobsLock sync.RWMutex
+	// The jobsMap stores the flag of the jobs that are being handled by the workers
+	jobsMap map[string]bool
 }
 
 // NewJobController create new Job Controller
@@ -122,6 +128,7 @@ func NewJobController(
 		cache:           jobcache.New(),
 		recorder:        recorder,
 		priorityClasses: make(map[string]*v1beta1.PriorityClass),
+		jobsMap:         map[string]bool{},
 	}
 
 	cc.jobInformer = vkinfoext.NewSharedInformerFactory(cc.vkClients, 0).Batch().V1alpha1().Jobs()
@@ -222,6 +229,25 @@ func (cc *Controller) processNextReq() bool {
 
 	req := obj.(apis.Request)
 	defer cc.queue.Done(req)
+
+	key := jobcache.JobKeyByReq(&req)
+
+	// prevent multi threads processing the same job simultaneously.
+	cc.jobsLock.Lock()
+	if cc.jobsMap[key] {
+		// the job is being processed by some other thread
+		cc.queue.AddRateLimited(req)
+		cc.jobsLock.Unlock()
+		return true
+	} else {
+		cc.jobsMap[key] = true
+		cc.jobsLock.Unlock()
+		defer func() {
+			cc.jobsLock.Lock()
+			delete(cc.jobsMap, key)
+			cc.jobsLock.Unlock()
+		}()
+	}
 
 	glog.V(3).Infof("Try to handle request <%v>", req)
 
