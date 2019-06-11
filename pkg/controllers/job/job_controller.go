@@ -210,7 +210,15 @@ func (cc *Controller) Run(workers int, stopCh <-chan struct{}) {
 	go wait.Until(cc.handleCommands, 0, stopCh)
 
 	for i := 0; i < workers; i++ {
-		go wait.Until(cc.worker, time.Second, stopCh)
+		go func(num int) {
+			wait.Until(
+				func() {
+					cc.worker(num)
+				},
+				time.Second,
+				stopCh)
+		}(i)
+
 	}
 
 	go cc.cache.Run(stopCh)
@@ -218,23 +226,15 @@ func (cc *Controller) Run(workers int, stopCh <-chan struct{}) {
 	glog.Infof("JobController is running ...... ")
 }
 
-var flag bool
+func (cc *Controller) worker(i int) {
 
-func (cc *Controller) worker() {
-	var count int
-	glog.Infof("*******worker start ...... ")
-	if flag {
-		count++
-	} else {
-		count = 0
-		flag = true
-	}
+	glog.Infof("*******worker %d start ...... ", i)
 
-	glog.Infof("*******worker count:%d ...... ", count)
-	for cc.processNextReq(count) {
+	for cc.processNextReq(i) {
 	}
 }
 
+// TODO we may need to make this sharding more proper
 func (cc *Controller) belongsToThisRoutine(key string, count int) bool {
 	var val int
 	for _, v := range []byte(key) {
@@ -244,9 +244,12 @@ func (cc *Controller) belongsToThisRoutine(key string, count int) bool {
 	if val%cc.workers == count {
 		return true
 	}
+
 	return false
 }
+
 func (cc *Controller) processNextReq(count int) bool {
+
 	obj, shutdown := cc.queue.Get()
 	if shutdown {
 		glog.Errorf("Fail to pop item from queue")
@@ -259,7 +262,8 @@ func (cc *Controller) processNextReq(count int) bool {
 	key := jobcache.JobKeyByReq(&req)
 
 	if !cc.belongsToThisRoutine(key, count) {
-		glog.Infof("*******belongsToThisRoutine false key:%s, count:%d...... ", key, count)
+		glog.Infof("The job does not belongs to this routine key:%s, worker:%d...... ", key, count)
+		cc.queue.AddRateLimited(req)
 		return true
 	}
 
