@@ -104,6 +104,8 @@ type Controller struct {
 	jobsLock sync.RWMutex
 	// The jobsMap stores the flag of the jobs that are being handled by the workers
 	jobsMap map[string]bool
+
+	workers int
 }
 
 // NewJobController create new Job Controller
@@ -192,6 +194,7 @@ func NewJobController(
 
 // Run start JobController
 func (cc *Controller) Run(workers int, stopCh <-chan struct{}) {
+	cc.workers = workers
 	go cc.sharedInformers.Start(stopCh)
 	go cc.jobInformer.Informer().Run(stopCh)
 	go cc.podInformer.Informer().Run(stopCh)
@@ -215,12 +218,35 @@ func (cc *Controller) Run(workers int, stopCh <-chan struct{}) {
 	glog.Infof("JobController is running ...... ")
 }
 
+var flag bool
+
 func (cc *Controller) worker() {
-	for cc.processNextReq() {
+	var count int
+	glog.Infof("*******worker start ...... ")
+	if flag {
+		count++
+	} else {
+		count = 0
+		flag = true
+	}
+
+	glog.Infof("*******worker count:%d ...... ", count)
+	for cc.processNextReq(count) {
 	}
 }
 
-func (cc *Controller) processNextReq() bool {
+func (cc *Controller) belongsToThisRoutine(key string, count int) bool {
+	var val int
+	for _, v := range []byte(key) {
+		val += int(v)
+	}
+
+	if val%cc.workers == count {
+		return true
+	}
+	return false
+}
+func (cc *Controller) processNextReq(count int) bool {
 	obj, shutdown := cc.queue.Get()
 	if shutdown {
 		glog.Errorf("Fail to pop item from queue")
@@ -231,6 +257,11 @@ func (cc *Controller) processNextReq() bool {
 	defer cc.queue.Done(req)
 
 	key := jobcache.JobKeyByReq(&req)
+
+	if !cc.belongsToThisRoutine(key, count) {
+		glog.Infof("*******belongsToThisRoutine false key:%s, count:%d...... ", key, count)
+		return true
+	}
 
 	// prevent multi threads processing the same job simultaneously.
 	cc.jobsLock.Lock()
