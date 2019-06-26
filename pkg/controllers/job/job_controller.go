@@ -105,6 +105,9 @@ type Controller struct {
 	// To protect the queue list by processing multiple workers
 	lock sync.RWMutex
 
+	// To protect the cache by processing multiple workers / actions
+	lockCache sync.RWMutex
+
 	workers uint32
 }
 
@@ -297,8 +300,9 @@ func (cc *Controller) processNextReq(count uint32) bool {
 	}
 
 	glog.V(3).Infof("Try to handle request <%v>", req)
-
+	cc.lockCache.Lock()
 	jobInfo, err := cc.cache.Get(jobcache.JobKeyByReq(&req))
+	cc.lockCache.Unlock()
 	if err != nil {
 		// TODO(k82cn): ignore not-ready error.
 		glog.Errorf("Failed to get job by <%v> from cache: %v", req, err)

@@ -121,7 +121,10 @@ func (cc *Controller) killJob(jobInfo *apis.JobInfo, podRetainPhase state.PhaseM
 			job.Namespace, job.Name, err)
 		return err
 	} else {
-		if e := cc.cache.Update(job); e != nil {
+		cc.lockCache.Lock()
+		e := cc.cache.Update(job)
+		cc.lockCache.Unlock()
+		if e != nil {
 			glog.Errorf("KillJob - Failed to update Job %v/%v in cache:  %v",
 				job.Namespace, job.Name, e)
 			return e
@@ -183,7 +186,10 @@ func (cc *Controller) createJob(jobInfo *apis.JobInfo, updateStatus state.Update
 			job.Namespace, job.Name, err)
 		return err
 	} else {
-		if err := cc.cache.Update(job); err != nil {
+		cc.lockCache.Lock()
+		err := cc.cache.Update(job)
+		cc.lockCache.Unlock()
+		if err != nil {
 			glog.Errorf("CreateJob - Failed to update Job %v/%v in cache:  %v",
 				job.Namespace, job.Name, err)
 			return err
@@ -336,7 +342,10 @@ func (cc *Controller) syncJob(jobInfo *apis.JobInfo, updateStatus state.UpdateSt
 			job.Namespace, job.Name, err)
 		return err
 	} else {
-		if e := cc.cache.Update(job); e != nil {
+		cc.lockCache.Lock()
+		e := cc.cache.Update(job)
+		cc.lockCache.Unlock()
+		if e != nil {
 			glog.Errorf("SyncJob - Failed to update Job %v/%v in cache:  %v",
 				job.Namespace, job.Name, e)
 			return e
