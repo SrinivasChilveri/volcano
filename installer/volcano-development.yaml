@@ -22,6 +22,8 @@ data:
       - name: predicates
       - name: proportion
       - name: nodeorder
+    action-arguments:
+        enqueue-action-idleres-mul: 1.2
   volcano-scheduler.conf: |
     actions: "enqueue, allocate, backfill"
     tiers:
@@ -34,6 +36,8 @@ data:
       - name: predicates
       - name: proportion
       - name: nodeorder
+    action-arguments:
+        enqueue-action-idleres-mul: 1.2
   
 ---
 apiVersion: v1
