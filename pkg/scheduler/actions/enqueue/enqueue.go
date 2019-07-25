@@ -17,12 +17,26 @@ limitations under the License.
 package enqueue
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+	"volcano.sh/volcano/pkg/scheduler/conf"
+
 	"github.com/golang/glog"
 
 	"volcano.sh/volcano/pkg/scheduler/api"
 	"volcano.sh/volcano/pkg/scheduler/framework"
 	"volcano.sh/volcano/pkg/scheduler/util"
 )
+
+// DefaultEnqueueActionKey
+const DefaultEnqueueActionKey = "enqueue-action-idleres-mul"
+
+// DefaultEnqueueActionValue
+const DefaultEnqueueActionValue = 1.2
+
+// EnqueueActionName
+const EnqueueActionName = "enqueue"
 
 type enqueueAction struct {
 	ssn *framework.Session
@@ -33,7 +47,7 @@ func New() *enqueueAction {
 }
 
 func (enqueue *enqueueAction) Name() string {
-	return "enqueue"
+	return EnqueueActionName
 }
 
 func (enqueue *enqueueAction) Initialize() {}
@@ -41,6 +55,14 @@ func (enqueue *enqueueAction) Initialize() {}
 func (enqueue *enqueueAction) Execute(ssn *framework.Session) {
 	glog.V(3).Infof("Enter Enqueue ...")
 	defer glog.V(3).Infof("Leaving Enqueue ...")
+	multiplier := DefaultEnqueueActionValue
+	if ssn.SchedStConf.Version == framework.SchedulerConfigVersion2 {
+		ret, err := getEnqueueActMultiplier(ssn.SchedStConf.V2Conf.Actions)
+		glog.V(3).Infof("getEnqueueActMultiplier ret %v , err:%v", ret, err)
+		if err == nil {
+			multiplier = ret
+		}
+	}
 
 	queues := util.NewPriorityQueue(ssn.QueueOrderFn)
 	queueMap := map[api.QueueID]*api.QueueInfo{}
@@ -76,7 +98,7 @@ func (enqueue *enqueueAction) Execute(ssn *framework.Session) {
 	emptyRes := api.EmptyResource()
 	nodesIdleRes := api.EmptyResource()
 	for _, node := range ssn.Nodes {
-		nodesIdleRes.Add(node.Allocatable.Clone().Multi(1.2).Sub(node.Used))
+		nodesIdleRes.Add(node.Allocatable.Clone().Multi(multiplier).Sub(node.Used))
 	}
 
 	for {
@@ -121,3 +143,36 @@ func (enqueue *enqueueAction) Execute(ssn *framework.Session) {
 }
 
 func (enqueue *enqueueAction) UnInitialize() {}
+
+func getEnqueueActMultiplier(actOpt []conf.ActionOption) (float64, error) {
+
+	actionOpt, err := getEnqueueActionOption(actOpt)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if actionOpt.Arguments != nil {
+		val, ok := actionOpt.Arguments[DefaultEnqueueActionKey]
+		if ok {
+			value, err := strconv.ParseFloat(val, 64)
+			if err != nil {
+				glog.Warningf("Could not parse argument: %s for key %s, with err %v", val, DefaultEnqueueActionKey, err)
+				return 0, err
+			}
+			return value, nil
+		}
+	}
+	return 0, fmt.Errorf("The required key %s is not there in config", DefaultEnqueueActionKey)
+
+}
+
+func getEnqueueActionOption(actOpts []conf.ActionOption) (conf.ActionOption, error) {
+	var actionOpt conf.ActionOption
+	for _, actionOpt = range actOpts {
+		if strings.Compare(EnqueueActionName, strings.TrimSpace(actionOpt.Name)) == 0 {
+			return actionOpt, nil
+		}
+	}
+	return actionOpt, fmt.Errorf("The required action %s is not there in config", EnqueueActionName)
+}
