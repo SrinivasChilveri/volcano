@@ -11,7 +11,14 @@ metadata:
   namespace: volcano-system
 data:
   volcano-scheduler-ci.conf: |
-    actions: "enqueue, reclaim, allocate, backfill, preempt"
+    actions:
+    - name: enqueue
+      arguments:
+        enqueue-action-idleres-mul: 1.2
+    - name: allocate
+    - name: backfill
+    - name: reclaim
+    - name: preempt
     tiers:
     - plugins:
       - name: priority
@@ -22,10 +29,13 @@ data:
       - name: predicates
       - name: proportion
       - name: nodeorder
-    action-arguments:
-        enqueue-action-idleres-mul: 1.2
   volcano-scheduler.conf: |
-    actions: "enqueue, allocate, backfill"
+    actions:
+    - name: enqueue
+      arguments:
+        enqueue-action-idleres-mul: 1.2
+    - name: allocate
+    - name: backfill
     tiers:
     - plugins:
       - name: priority
@@ -36,8 +46,6 @@ data:
       - name: predicates
       - name: proportion
       - name: nodeorder
-    action-arguments:
-        enqueue-action-idleres-mul: 1.2
   
 ---
 apiVersion: v1
